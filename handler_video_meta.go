@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -94,27 +95,46 @@ func (cfg *apiConfig) handlerVideoGet(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusNotFound, "Couldn't get video", err)
 		return
 	}
+	signedVideo, err := cfg.dbVideoToSignedVideo(video)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error signing video", err)
+		return
+	}
 
-	respondWithJSON(w, http.StatusOK, video)
+	respondWithJSON(w, http.StatusOK, signedVideo)
 }
 
 func (cfg *apiConfig) handlerVideosRetrieve(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("retrieve videos\n")
 	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, "Couldn't find JWT", err)
 		return
 	}
+	fmt.Printf("token: %v\n", token)
 	userID, err := auth.ValidateJWT(token, cfg.jwtSecret)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, "Couldn't validate JWT", err)
 		return
 	}
+	fmt.Printf("userID: %v\n", userID)
 
 	videos, err := cfg.db.GetVideos(userID)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve videos", err)
 		return
 	}
+	fmt.Printf("videos: %v\n", videos)
+	signedVideos := make([]database.Video, 0, len(videos))
+	for _, video := range videos {
+		signedVideo, err := cfg.dbVideoToSignedVideo(video)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "error signing video", err)
+			return
+		}
+		signedVideos = append(signedVideos, signedVideo)
+	}
+	fmt.Printf("signed videos: %v\n", signedVideos)
 
-	respondWithJSON(w, http.StatusOK, videos)
+	respondWithJSON(w, http.StatusOK, signedVideos)
 }
